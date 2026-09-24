@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-cliauth}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cliauth}
+      POSTGRES_DB: ${DB_NAME:-cliauth}
+    volumes:
+      # Survives down/restart.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cliauth} -d ${DB_NAME:-cliauth}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-cliauth}
+      DB_PASSWORD: ${DB_PASSWORD:-cliauth}
+      DB_NAME: ${DB_NAME:-cliauth}
+      SESSION_TIMEOUT: ${SESSION_TIMEOUT:-15m}
+      MAX_FAILED_ATTEMPTS: ${MAX_FAILED_ATTEMPTS:-5}
+      LOCKOUT_DURATION: ${LOCKOUT_DURATION:-5m}
+      BCRYPT_COST: ${BCRYPT_COST:-12}
+      TOTP_ISSUER: ${TOTP_ISSUER:-cli-login}
+    volumes:
+      # Keeps shell history.
+      - apphome:/home/app
+    stdin_open: true
+    tty: true
+
+  # docker compose run --rm test
+  test:
+    build:
+      context: .
+      target: test
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "host=db port=5432 user=${DB_USER:-cliauth} password=${DB_PASSWORD:-cliauth} dbname=${DB_NAME:-cliauth} sslmode=disable"
+    profiles: ["test"]
+
+volumes:
+  pgdata:
+  apphome:
